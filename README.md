@@ -61,16 +61,25 @@ Savoir naviguer dans le système est un prérequis, pas un bonus.
 - **Git** : commits, branches, remotes, résolution de conflits
 - Bases du scripting shell
 
-#### 3. `projets_to_learn_algo/` — Algorithmique
+#### 3. [`4.projects_to_learn_algo/`](4.projects_to_learn_algo/) — Algorithmique
 
 Ce qui sépare un programme qui marche d'un programme qui tient la charge.
 
+Dix leçons, un fichier d'exercices par leçon, et trois projets. Tout s'écrit en C :
+implémenter une liste chaînée dans un langage à ramasse-miettes cache exactement
+ce qu'on cherche à comprendre.
+
 - Complexité, notation Big-O
-- Tris : sélection, insertion, fusion, rapide
 - Recherche : linéaire, dichotomique
+- Tris : sélection, insertion, bulles, fusion, rapide
+- Récursivité, pile d'appels, mémoïsation
 - Structures : listes chaînées, piles, files, arbres, tables de hachage
-- Récursivité
 - Graphes : parcours en largeur et en profondeur
+
+Les trois projets — [analyseur de texte](4.projects_to_learn_algo/projects/01_analyseur_de_texte/),
+[moteur d'itinéraires](4.projects_to_learn_algo/projects/02_moteur_itineraires/),
+[banc de mesure des tris](4.projects_to_learn_algo/projects/03_banc_de_tri/) — mettent
+les structures en concurrence sur un cas réel.
 
 ### Phase 2 — Choisir une spécialisation
 
@@ -106,7 +115,7 @@ Le cross-platform (Flutter) et les quatre façons de brancher un backend y sont
 - [ ] `learn_C` — bases du langage
 - [ ] `learn_C` — pointeurs et mémoire
 - [ ] `learn_linux` — shell et Git
-- [ ] `projets_to_learn_algo` — structures de données
+- [ ] `4.projects_to_learn_algo` — structures de données
 - [ ] Choix de la spécialisation
 
 ## Comment travailler dans ce dépôt

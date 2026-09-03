@@ -159,8 +159,12 @@ Ajoute un cache. Initialise-le à `-1`.
 
 Relance `fibo(60)`, `fibo(80)`, `fibo(90)`. Instantané.
 
-*Piège :* `fibo(93)` déborde un `unsigned long long`. Trouve la valeur exacte à
-partir de laquelle ça arrive.
+*Piège :* au-delà d'un certain rang, le résultat déborde même un
+`unsigned long long`. Trouve le premier `n` où cela arrive.
+
+*Indice :* un débordement sur un type non signé ne provoque aucune erreur — le
+résultat repart simplement à zéro. Détecte-le en vérifiant que la somme est bien
+supérieure à ses deux opérandes.
 
 ## 3.5 — La version itérative
 
