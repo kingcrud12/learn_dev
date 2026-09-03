@@ -1,145 +1,93 @@
 # gRPC — appeler une fonction qui vit sur une autre machine
 
-Tu viens d'écrire tes premiers programmes en C. Quand tu écris `printf("Salut\n");`,
-tu appelles une fonction : tu donnes un nom, des arguments, et tu récupères
-éventuellement une valeur de retour. Tout se passe dans ton programme, sur ton Mac,
-dans la même mémoire.
+Quand tu écris `printf("Salut\n");` en C, tu appelles une fonction : un nom, des arguments, une valeur de retour. Tout se passe dans ton programme, sur ton Mac, dans la même mémoire.
 
-Cette leçon parle de ce qui se passe quand la fonction que tu veux appeler n'est
-**pas** dans ton programme. Elle est sur un serveur, à Paris ou en Virginie, écrite
-peut-être dans un autre langage que le tien. Tu voudrais quand même l'appeler comme
-si elle était locale : `envoyerMessage("bonjour")` et hop, ça marche.
+Cette leçon parle du cas où la fonction n'est **pas** dans ton programme. Elle est sur un serveur, à Paris ou en Virginie, écrite peut-être dans un autre langage. Tu voudrais quand même l'appeler comme si elle était locale : `envoyerMessage("bonjour")`, et hop. C'est le problème que gRPC résout.
 
-C'est exactement le problème que gRPC résout.
-
-> **Prérequis :** cette leçon suppose que tu as fait un « hello world » en C et que tu
-> sais te déplacer dans un terminal (`cd`, `ls`, chemins relatifs et absolus, `chmod`).
-> Elle ne suppose **pas** que tu connaisses HTTP, JSON, ni un langage de haut niveau.
-> Quand une section a besoin de quelque chose que tu n'as pas encore vu, c'est signalé
-> explicitement.
+> **Prérequis :** cette leçon suppose un « hello world » en C et les bases du terminal (`cd`, `ls`, chemins, `chmod`). Elle ne suppose **pas** HTTP, JSON, ni un langage de haut niveau. Quand une section a besoin de ce que tu n'as pas encore vu, c'est signalé.
 
 ---
 
 ## 1. Le problème : deux machines qui ne partagent rien
 
-Reprends ton programme C. Quand tu appelles une fonction, plusieurs choses se
-passent automatiquement, et elles sont *gratuites* parce que tout est au même endroit :
+En local, un appel de fonction bénéficie de choses gratuites, parce que tout est au même endroit :
 
 ```
-   ton programme (un seul processus, une seule mémoire)
-   ┌────────────────────────────────────────────┐
-   │  main()                                    │
-   │     │                                      │
-   │     │  appel : addition(3, 4)              │
-   │     ▼                                      │
-   │  addition(int a, int b)                    │
-   │     └── retourne 7 ────────────┐           │
-   │                                ▼           │
-   │  main() continue avec 7                    │
-   └────────────────────────────────────────────┘
+   ton programme (un processus, une mémoire)
+   ┌──────────────────────────────────┐
+   │  main()                          │
+   │    │ appel : addition(3, 4)      │
+   │    ▼                             │
+   │  addition(int a, int b)          │
+   │    └── retourne 7 ──────┐        │
+   │                         ▼        │
+   │  main() continue avec 7          │
+   └──────────────────────────────────┘
 ```
 
-Les arguments `3` et `4` sont déjà en mémoire, dans un format que le processeur
-comprend. Le compilateur connaît le type de `addition` : il sait que ça prend deux
-`int` et rend un `int`. Si tu te trompes, la compilation échoue. Et l'appel est
-quasi instantané.
+Mets `addition` sur une autre machine, et tout ce qui était gratuit devient un problème :
 
-Maintenant, mets `addition` sur une autre machine. Tout ce qui était gratuit devient
-un problème :
-
-| Ce qui était gratuit en local | Le problème quand c'est distant |
+| Gratuit en local | Le problème en distant |
 |---|---|
-| Les arguments sont en mémoire | Il faut les transformer en une suite d'octets transmissible |
-| Le compilateur vérifie les types | Les deux machines compilent séparément, personne ne vérifie |
-| L'appel réussit toujours | Le réseau peut couper, le serveur peut être éteint |
-| Le temps d'appel est négligeable | Il faut compter en millisecondes, parfois en centaines |
-| Même langage des deux côtés | Le serveur est peut-être en Go, ton app en Swift |
+| Les arguments sont en mémoire | Il faut les transformer en octets transmissibles |
+| Le compilateur vérifie les types | Les deux machines compilent séparément |
+| L'appel réussit toujours | Le réseau coupe, le serveur s'éteint |
+| L'appel est instantané | On compte en millisecondes, parfois en centaines |
+| Même langage des deux côtés | Le serveur est en Go, ton app en Swift |
 
-Transformer une valeur en mémoire vers une suite d'octets s'appelle la
-**sérialisation**. L'opération inverse, la **désérialisation**. C'est le cœur du
-sujet : tout le reste en découle.
+Transformer une valeur en mémoire vers une suite d'octets s'appelle la **sérialisation** ; l'inverse, la **désérialisation**. Tout le reste en découle.
 
 ---
 
 ## 2. RPC : une vieille idée
 
-**RPC** veut dire *Remote Procedure Call* — appel de procédure à distance. Le mot
-« procédure » est un vieux mot pour « fonction ».
+**RPC** = *Remote Procedure Call*, appel de procédure à distance (« procédure » est un vieux mot pour « fonction »). L'idée date des années 1970-80 et n'a pas bougé : *faire en sorte que l'appel distant ressemble à un appel local*.
 
-L'idée date des années 1970-1980, et elle est restée la même depuis : *faire en sorte
-que l'appel distant ressemble le plus possible à un appel local*. Le programmeur écrit
-`client.Addition(3, 4)` et il ne veut pas savoir qu'un paquet réseau part, traverse
-l'Atlantique et revient.
-
-Pour créer cette illusion, RPC introduit une pièce essentielle : le **stub** (parfois
-appelé « souche » ou « proxy »). C'est une fonction locale, générée automatiquement,
-qui a la même signature que la fonction distante, mais dont le corps ne fait pas le
-calcul — il fait le voyage :
+Pour créer cette illusion, RPC introduit le **stub** (ou « souche »). C'est une fonction locale, générée automatiquement, qui a la signature de la fonction distante mais dont le corps ne calcule pas — il voyage :
 
 ```
-   CLIENT                              RÉSEAU              SERVEUR
-   ──────                              ──────              ───────
+   CLIENT                          RÉSEAU           SERVEUR
+   ──────                          ──────           ───────
    ton code
-     │
      │ addition(3, 4)
      ▼
-   ┌──────────┐
-   │  STUB    │  sérialise 3 et 4
-   │ (généré) │  ──────────────────►  octets  ──────►  ┌──────────┐
-   └──────────┘                                        │  STUB    │ désérialise
-        ▲                                              │ (généré) │
-        │                                              └──────────┘
-        │                                                   │
-        │                                                   ▼
-        │                                            addition(3, 4)
-        │                                              vraie fonction
-        │                                                   │
-        │                                                   ▼
-   désérialise  ◄──────  octets  ◄─────────────────  sérialise 7
-        │
-        ▼
+   ┌────────┐  sérialise
+   │  STUB  │ ─────────────►  octets  ────►  ┌────────┐ désérialise
+   └────────┘                                │  STUB  │
+       ▲                                     └────────┘
+       │                                          │
+       │                                          ▼
+       │                                   addition(3, 4)
+       │                                    vraie fonction
+       │                                          │
+       │ désérialise ◄── octets ◄───── sérialise 7
+       ▼
    ton code reçoit 7
 ```
 
-Les deux stubs sont **générés automatiquement** à partir d'une description commune.
-C'est ça la clé : tu ne les écris jamais à la main. Tu écris la description, un outil
-fabrique le code des deux côtés.
+Les deux stubs sont **générés** à partir d'une description commune. Tu ne les écris jamais à la main : tu écris la description, un outil fabrique le code des deux côtés.
 
-Il y a eu beaucoup de systèmes RPC : Sun RPC dans les années 80, CORBA dans les années
-90, XML-RPC puis SOAP autour de 2000. Ils ont tous été jugés trop lourds ou trop
-complexes à un moment. **gRPC** est la proposition de Google, sortie en 2015, et c'est
-celle qui domine aujourd'hui dans les architectures modernes. Le « g » est
-officiellement récursif et change de sens à chaque version — ne cherche pas, c'est une
-blague d'ingénieurs.
+Il y a eu Sun RPC dans les années 80, CORBA dans les années 90, XML-RPC puis SOAP vers 2000 — tous jugés trop lourds à un moment. **gRPC** est la proposition de Google (2015), celle qui domine aujourd'hui. Le « g » est officiellement récursif et change de sens à chaque version ; c'est une blague d'ingénieurs, ne cherche pas.
 
 ---
 
 ## 3. Protocol Buffers : la description et le format binaire
 
-gRPC repose sur **Protocol Buffers** (souvent abrégé *protobuf*). C'est deux choses
-en une, et il faut bien les distinguer :
-
-1. **Un langage de description** : tu écris un fichier `.proto` qui décrit tes données
-   et tes fonctions. C'est le contrat.
-2. **Un format binaire** : la façon dont ces données voyagent sur le réseau, sous forme
-   d'octets compacts.
+gRPC repose sur **Protocol Buffers** (*protobuf*), qui est deux choses à distinguer : un **langage de description** (le fichier `.proto`, ton contrat) et un **format binaire** (la façon dont les données voyagent).
 
 ### 3.1 Le fichier .proto
-
-Voici le plus petit exemple utile :
 
 ```proto
 syntax = "proto3";
 
 message Utilisateur {
-  int32 id = 1;
-  string nom = 2;
-  bool actif = 3;
+  int32  id    = 1;
+  string nom   = 2;
+  bool   actif = 3;
 }
 ```
 
-Un `message` est un **regroupement de champs**, exactement comme un `struct` en C.
-Si tu avais écrit ça en C, tu aurais fait :
+Un `message` regroupe des champs, exactement comme un `struct` en C :
 
 ```c
 struct Utilisateur {
@@ -149,42 +97,32 @@ struct Utilisateur {
 };
 ```
 
-La différence importante, c'est le `= 1`, `= 2`, `= 3`. **Ce ne sont pas des valeurs
-par défaut.** Ce sont des **numéros de champ**, et c'est le mécanisme central de
-protobuf.
+La différence importante : `= 1`, `= 2`, `= 3` ne sont **pas des valeurs par défaut**. Ce sont des **numéros de champ**, le mécanisme central de protobuf.
 
-### 3.2 Pourquoi des numéros de champ
+### 3.2 Pourquoi des numéros
 
-Quand protobuf sérialise ton `Utilisateur`, il n'écrit **pas** le nom des champs. Il
-écrit le numéro. Compare :
-
-Du texte lisible (ce que fait un autre format, JSON, que tu verras dans la leçon REST) :
+Protobuf n'écrit **pas** le nom des champs sur le réseau, seulement leur numéro. Compare avec un format texte (JSON, que tu verras en leçon REST) :
 
 ```
-{"id":42,"nom":"Zoe","actif":true}      →  34 octets
+{"id":42,"nom":"Zoe","actif":true}        →  34 octets
 ```
 
-Du protobuf (représenté ici en hexadécimal, chaque paire = 1 octet) :
+Le même en protobuf (en hexadécimal, une paire = un octet) :
 
 ```
-08 2A 12 03 5A 6F 65 18 01               →  9 octets
-│  │  │  │  └──────┘  │  └── valeur : 1 (vrai)
-│  │  │  │     │      └───── champ 3, type variable
+08 2A 12 03 5A 6F 65 18 01                →  9 octets
+│  │  │  │  └──────┘  │  └── valeur : vrai
+│  │  │  │     │      └───── champ 3
 │  │  │  │     └──────────── "Zoe" en ASCII
-│  │  │  └────────────────── longueur : 3 octets
-│  │  └───────────────────── champ 2, type "longueur préfixée"
+│  │  │  └────────────────── longueur : 3
+│  │  └───────────────────── champ 2, longueur préfixée
 │  └──────────────────────── valeur : 42 (0x2A)
-└─────────────────────────── champ 1, type variable
+└─────────────────────────── champ 1
 ```
 
-Presque quatre fois moins d'octets. Les noms `id`, `nom`, `actif` n'apparaissent nulle
-part : le récepteur sait que le champ 1 s'appelle `id` parce qu'il a **le même fichier
-.proto**. Le contrat est partagé à la compilation, pas transmis à chaque message.
+Presque quatre fois moins. Les noms n'apparaissent nulle part : le récepteur sait que le champ 1 s'appelle `id` parce qu'il a **le même `.proto`**. Le contrat est partagé à la compilation, pas transmis à chaque message.
 
-C'est aussi pour ça qu'une règle est absolue en protobuf : **on ne change jamais le
-numéro d'un champ existant**. Tu peux renommer `nom` en `pseudo` sans rien casser (le
-nom ne voyage pas), mais si tu changes son numéro de 2 à 5, tous les clients déjà
-déployés liront n'importe quoi.
+D'où une règle absolue : **on ne change jamais le numéro d'un champ existant**. Renommer `nom` en `pseudo` ne casse rien (le nom ne voyage pas) ; changer son numéro de 2 à 5 fait lire n'importe quoi à tous les clients déployés.
 
 ### 3.3 Les types de base
 
@@ -193,21 +131,18 @@ déployés liront n'importe quoi.
 | `int32`, `int64` | entier signé | `int32_t`, `int64_t` |
 | `uint32`, `uint64` | entier non signé | `uint32_t`, `uint64_t` |
 | `bool` | vrai ou faux | `int` valant 0 ou 1 |
-| `string` | texte, toujours en UTF-8 | `char *` (mais avec la longueur connue) |
-| `bytes` | données brutes, non interprétées | `unsigned char *` + taille |
-| `double`, `float` | nombre à virgule | `double`, `float` |
-| `repeated X` | une liste de X, taille variable | tableau dynamique |
+| `string` | texte, toujours UTF-8 | `char *` avec longueur connue |
+| `bytes` | données brutes | `unsigned char *` + taille |
+| `double`, `float` | virgule flottante | `double`, `float` |
+| `repeated X` | liste de X, taille variable | tableau dynamique |
 
-`repeated` remplace ce que tu ferais en C avec un pointeur et un compteur de taille.
-En proto, tu écris juste `repeated string tags = 4;` et le code généré te donne une
-liste utilisable directement.
+`repeated` remplace ce que tu ferais en C avec un pointeur et un compteur : `repeated string tags = 4;` te donne une liste utilisable directement.
 
 ---
 
 ## 4. Définir un service
 
-Un `message` décrit des **données**. Pour décrire des **fonctions**, on utilise
-`service` et `rpc` :
+Un `message` décrit des **données** ; `service` et `rpc` décrivent des **fonctions** :
 
 ```proto
 service Calculatrice {
@@ -215,13 +150,7 @@ service Calculatrice {
 }
 ```
 
-Ça se lit : « le service `Calculatrice` expose une fonction `Addition` qui prend un
-`RequeteAddition` et rend un `ReponseAddition` ».
-
-Note une contrainte forte : **une méthode gRPC prend exactement un message et rend
-exactement un message**. Pas deux arguments, pas zéro. C'est volontaire — ça permet
-d'ajouter un champ plus tard sans casser les appelants existants. Si tu as besoin de
-deux paramètres, tu les mets dans le message :
+Contrainte forte : **une méthode prend exactement un message et rend exactement un message**. C'est volontaire — ça permet d'ajouter un champ plus tard sans casser les appelants. Deux paramètres ? Mets-les dans le message :
 
 ```proto
 message RequeteAddition {
@@ -234,60 +163,47 @@ message ReponseAddition {
 }
 ```
 
-Cette habitude de toujours envelopper les paramètres dans un message dédié est une
-bonne pratique reconnue, même quand il n'y a qu'un seul champ.
+Envelopper les paramètres dans un message dédié, même pour un seul champ, est une bonne pratique reconnue.
 
 ---
 
 ## 5. REST vs gRPC : la comparaison honnête
 
-REST est l'autre grande façon de faire communiquer deux machines, et c'est de loin la
-plus répandue. Tu l'étudieras dans `../../rest_api/lessons/`. Voici les vraies
-différences, sans militantisme :
+REST est l'autre grande façon de faire communiquer deux machines, et de loin la plus répandue ; tu l'étudieras dans `../../rest_api/lessons/`. Les vraies différences, sans militantisme :
 
 | Critère | REST (avec JSON) | gRPC (avec protobuf) |
 |---|---|---|
-| Format sur le réseau | Texte JSON, lisible à l'œil nu | Binaire, illisible sans outil |
-| Contrat | Informel : documentation, convention | Formel : le fichier `.proto` fait foi |
-| Vérification des types | À l'exécution, souvent jamais | À la génération de code, avant l'exécution |
-| Taille des messages | Référence | Typiquement 3 à 10× plus petit |
-| Vitesse de (dé)sérialisation | Analyse de texte, coûteuse | Lecture d'octets, très rapide |
-| Débogage à la main | `curl` suffit, tu lis la réponse | Il faut `grpcurl` et le `.proto` |
-| Support navigateur | Natif et total | Partiel, via grpc-web (voir §10) |
-| Streaming | Pas prévu par le modèle | Natif, dans les deux sens |
-| Courbe d'apprentissage | Douce | Plus raide : outillage à installer |
-| Écosystème, tutoriels | Immense | Solide mais plus restreint |
+| Format réseau | Texte, lisible à l'œil | Binaire, illisible sans outil |
+| Contrat | Informel : doc, convention | Formel : le `.proto` fait foi |
+| Vérification des types | À l'exécution, souvent jamais | À la génération, avant l'exécution |
+| Taille des messages | Référence | 3 à 10× plus petit |
+| (Dé)sérialisation | Analyse de texte, coûteuse | Lecture d'octets, très rapide |
+| Débogage à la main | `curl` suffit | Il faut `grpcurl` et le `.proto` |
+| Support navigateur | Natif et total | Partiel, via grpc-web (§10) |
+| Streaming | Pas prévu | Natif, dans les deux sens |
+| Apprentissage | Doux | Plus raide, outillage à installer |
+| Écosystème | Immense | Solide mais plus restreint |
 
-La ligne la plus importante est celle du **contrat**. En REST, si le serveur renomme
-un champ, ton app mobile ne s'en rend compte qu'au moment où un utilisateur ouvre
-l'écran concerné, en production. En gRPC, le `.proto` change, tu régénères, et ton
-code ne compile plus. L'erreur remonte à la compilation au lieu de remonter chez
-l'utilisateur.
+La ligne décisive est celle du **contrat**. En REST, si le serveur renomme un champ, ton app mobile le découvre quand un utilisateur ouvre l'écran, en production. En gRPC, tu régénères et ton code ne compile plus : l'erreur remonte à la compilation au lieu de remonter chez l'utilisateur.
 
-La ligne la plus gênante est celle du **débogage**. Avec REST, tu tapes une commande
-dans ton terminal et tu lis la réponse. Avec gRPC, les octets ne veulent rien dire
-sans le `.proto` sous la main. C'est un vrai coût quotidien, il faut l'assumer.
+La ligne gênante est le **débogage**. Avec REST tu tapes une commande et tu lis la réponse ; avec gRPC les octets ne veulent rien dire sans le `.proto`. C'est un vrai coût quotidien, autant l'assumer.
 
 ---
 
 ## 6. Les quatre types d'appels
 
-REST propose essentiellement un modèle : une requête, une réponse. gRPC en propose
-quatre, parce qu'il est construit sur HTTP/2 (voir §7) qui permet d'envoyer plusieurs
-messages sur une même connexion ouverte.
+REST propose un modèle : une requête, une réponse. gRPC en propose quatre, parce qu'il repose sur HTTP/2 (§7) qui permet plusieurs messages sur une connexion ouverte.
 
 ### 6.1 Unaire — une requête, une réponse
 
-C'est l'équivalent exact d'un appel de fonction classique. 90 % de ce que tu écriras.
+L'équivalent exact d'un appel de fonction classique. 90 % de ce que tu écriras.
 
 ```
-CLIENT                          SERVEUR
-  │                                │
-  │ ──── RequeteAddition ────────► │
-  │                                │  calcule
-  │ ◄──── ReponseAddition ──────── │
-  │                                │
-  ✕ appel terminé
+CLIENT                      SERVEUR
+  │ ──── Requete ─────────►   │
+  │                           │ calcule
+  │ ◄──── Reponse ─────────   │
+  ✕ terminé
 ```
 
 ```proto
@@ -296,159 +212,125 @@ rpc Addition(RequeteAddition) returns (ReponseAddition);
 
 ### 6.2 Server streaming — une requête, N réponses
 
-Le client demande une fois, le serveur répond en plusieurs morceaux, sur la même
-connexion, jusqu'à ce qu'il annonce la fin.
+Le client demande une fois, le serveur répond en plusieurs morceaux jusqu'à annoncer la fin.
 
 ```
-CLIENT                          SERVEUR
-  │                                │
-  │ ──── RequeteHistorique ──────► │
-  │                                │
-  │ ◄──── Message #1 ───────────── │
-  │ ◄──── Message #2 ───────────── │
-  │ ◄──── Message #3 ───────────── │
-  │ ◄──── (fin du flux) ────────── │
+CLIENT                      SERVEUR
+  │ ──── Requete ─────────►   │
+  │ ◄──── Message #1 ──────   │
+  │ ◄──── Message #2 ──────   │
+  │ ◄──── Message #3 ──────   │
+  │ ◄──── (fin du flux) ───   │
   ✕
 ```
 
-Utile pour : télécharger une longue liste sans tout charger en mémoire, recevoir des
-notifications, suivre l'avancement d'une tâche longue.
+Pour : parcourir une longue liste sans tout charger en mémoire, recevoir des notifications, suivre une tâche longue.
 
 ```proto
-rpc Historique(RequeteHistorique) returns (stream Message);
+rpc Historique(HistoriqueRequete) returns (stream Message);
 ```
 
 ### 6.3 Client streaming — N requêtes, une réponse
 
-L'inverse. Le client envoie plusieurs messages, puis annonce qu'il a fini, et le
-serveur répond une seule fois.
+L'inverse : le client envoie plusieurs messages, annonce la fin, le serveur répond une fois.
 
 ```
-CLIENT                          SERVEUR
-  │                                │
-  │ ──── Morceau #1 ─────────────► │
-  │ ──── Morceau #2 ─────────────► │
-  │ ──── Morceau #3 ─────────────► │
-  │ ──── (fin du flux) ──────────► │
-  │                                │  traite l'ensemble
-  │ ◄──── Confirmation ─────────── │
+CLIENT                      SERVEUR
+  │ ──── Morceau #1 ──────►   │
+  │ ──── Morceau #2 ──────►   │
+  │ ──── Morceau #3 ──────►   │
+  │ ──── (fin du flux) ───►   │
+  │                           │ traite l'ensemble
+  │ ◄──── Confirmation ────   │
   ✕
 ```
 
-Utile pour : envoyer un fichier par morceaux, remonter un lot de mesures de capteurs,
-téléverser une photo depuis un mobile.
+Pour : envoyer un fichier par morceaux, remonter un lot de mesures, téléverser une photo depuis un mobile.
 
 ```proto
 rpc Televerser(stream Morceau) returns (Confirmation);
 ```
 
-### 6.4 Bidirectionnel — N requêtes, N réponses, dans n'importe quel ordre
+### 6.4 Bidirectionnel — N et N, dans n'importe quel ordre
 
-Les deux flux sont indépendants. Personne n'attend l'autre.
+Les deux flux sont indépendants, personne n'attend l'autre.
 
 ```
-CLIENT                          SERVEUR
-  │                                │
-  │ ──── Message A ──────────────► │
-  │ ◄──── Message 1 ────────────── │
-  │ ──── Message B ──────────────► │
-  │ ──── Message C ──────────────► │
-  │ ◄──── Message 2 ────────────── │
-  │ ◄──── Message 3 ────────────── │
-  │              ...               │
+CLIENT                      SERVEUR
+  │ ──── Message A ───────►   │
+  │ ◄──── Message 1 ───────   │
+  │ ──── Message B ───────►   │
+  │ ──── Message C ───────►   │
+  │ ◄──── Message 2 ───────   │
+  │            ...            │
 ```
 
-Utile pour : un chat, un jeu multijoueur, une session collaborative. C'est le cas où
-gRPC concurrence directement les WebSockets (voir `../../web_socket_api/lessons/`).
+Pour : un chat, un jeu multijoueur, une session collaborative. C'est là que gRPC concurrence les WebSockets (`../../web_socket_api/lessons/`).
 
-> **Prérequis :** les trois modes en streaming impliquent de la **programmation
-> asynchrone** — ton code ne s'arrête pas à attendre, il réagit quand un message
-> arrive. C'est un vrai changement de mentalité par rapport au C séquentiel que tu
-> écris aujourd'hui. Tu peux tout à fait comprendre les schémas ci-dessus maintenant,
-> mais les **implémenter** demandera d'avoir vu l'asynchrone dans un langage de haut
-> niveau. Reste sur l'unaire pour tes premiers essais.
+> **Prérequis :** les trois modes streaming impliquent de la **programmation asynchrone** — ton code n'attend pas, il réagit quand un message arrive. C'est un vrai changement par rapport au C séquentiel. Tu peux comprendre les schémas maintenant ; les **implémenter** demandera d'avoir vu l'asynchrone. Reste sur l'unaire pour tes premiers essais.
 
 ---
 
 ## 7. HTTP/2, le transport
 
-gRPC ne réinvente pas le transport : il utilise **HTTP/2**, la version 2 du protocole
-du web, sortie en 2015.
+gRPC ne réinvente pas le transport : il utilise **HTTP/2** (2015).
 
-> **Prérequis :** HTTP en profondeur (verbes, en-têtes, codes de statut) fait l'objet
-> de la leçon REST. Ici, retiens seulement ce que HTTP/2 apporte à gRPC.
+> **Prérequis :** HTTP en profondeur (verbes, en-têtes, codes de statut) est traité dans la leçon REST. Retiens ici seulement ce que HTTP/2 apporte.
 
-Le point décisif est le **multiplexage**. En HTTP/1.1, une connexion TCP ne traite
-qu'une requête à la fois. Si tu en lances trois, la deuxième attend la première :
+Le point décisif est le **multiplexage**. En HTTP/1.1, une connexion TCP traite une requête à la fois :
 
 ```
 HTTP/1.1 — une connexion, en file d'attente
-  ├── requête A ────────► ◄──── réponse A
-  ├────────────────── attente ──────────────┐
-  ├── requête B ────────► ◄──── réponse B   │  B est bloqué par A
-  └── requête C ────────► ◄──── réponse C   │  C est bloqué par B
+  ├── requête A ───►  ◄─── réponse A
+  ├── requête B ───►  ◄─── réponse B     B attend A
+  └── requête C ───►  ◄─── réponse C     C attend B
 ```
 
-En HTTP/2, une seule connexion porte plusieurs **flux** (*streams*) simultanés,
-identifiés par un numéro. Les octets des différents flux sont entrelacés et
-réassemblés à l'arrivée :
+En HTTP/2, une connexion porte plusieurs **flux** simultanés, numérotés, dont les octets sont entrelacés puis réassemblés :
 
 ```
 HTTP/2 — une connexion, flux entrelacés
   ┌── flux 1 : requête A ──►  ◄── réponse A ──┐
-  │── flux 3 : requête B ──►  ◄── réponse B ──│   tout circule en parallèle
+  │── flux 3 : requête B ──►  ◄── réponse B ──│   en parallèle
   └── flux 5 : requête C ──►  ◄── réponse C ──┘
 ```
 
-Trois conséquences directes pour gRPC :
-
-Une seule connexion suffit pour tous les appels d'une application. Sur mobile, ouvrir
-une connexion coûte cher (poignée de main TCP, puis négociation TLS, soit plusieurs
-allers-retours) — en économiser, c'est économiser de la batterie.
-
-Les en-têtes sont compressés (algorithme HPACK) au lieu d'être renvoyés en texte à
-chaque requête, ce qui économise de la bande passante sur des appels répétitifs.
-
-Les flux sont bidirectionnels par nature, ce qui rend possibles les quatre modes de la
-section 6. Sans HTTP/2, gRPC n'aurait que l'unaire.
+Trois conséquences pour gRPC. Une seule connexion suffit pour toute l'application, et sur mobile ouvrir une connexion coûte cher (poignée de main TCP puis négociation TLS, plusieurs allers-retours) — en économiser, c'est économiser de la batterie. Les en-têtes sont compressés (HPACK) au lieu d'être renvoyés en texte à chaque appel. Enfin les flux sont bidirectionnels par nature : sans HTTP/2, gRPC n'aurait que l'unaire.
 
 ---
 
 ## 8. Un exemple complet et commenté
 
-Voici un service de messagerie simple, avec les quatre types d'appels, entièrement
-commenté. Lis-le en entier avant de continuer — c'est le fichier de référence auquel
-les exercices se rapportent.
+Un service de messagerie avec les quatre types d'appels. Lis-le en entier — les exercices s'y rapportent.
 
 ```proto
-// La version de la syntaxe. Écris toujours "proto3" : proto2 est ancien
-// et se comporte différemment sur les valeurs par défaut.
+// Version de la syntaxe. Toujours "proto3" : proto2 est ancien et se
+// comporte différemment sur les valeurs par défaut.
 syntax = "proto3";
 
-// Un espace de noms, pour éviter que ton message "Message" entre en
-// collision avec celui d'une autre bibliothèque. Par convention, en
-// minuscules avec des points.
+// Espace de noms, pour éviter la collision entre ton message "Message"
+// et celui d'une autre bibliothèque. Par convention en minuscules.
 package messagerie.v1;
 
 // ---------- Les données ----------
 
 message Utilisateur {
-  string id     = 1;   // identifiant unique, choisi par le serveur
-  string pseudo = 2;
+  string id      = 1;   // identifiant unique, choisi par le serveur
+  string pseudo  = 2;
   bool   enligne = 3;
 }
 
 message Message {
-  string id             = 1;
-  string auteur_id      = 2;  // qui a écrit
-  string salon_id       = 3;  // dans quel salon
-  string texte          = 4;
-  int64  horodatage_ms  = 5;  // millisecondes depuis 1970 (temps Unix)
+  string id            = 1;
+  string auteur_id     = 2;  // qui a écrit
+  string salon_id      = 3;  // dans quel salon
+  string texte         = 4;
+  int64  horodatage_ms = 5;  // millisecondes depuis 1970 (temps Unix)
 }
 
-// ---------- Les requêtes et réponses ----------
-// Un message dédié par méthode, même quand il n'a qu'un champ :
-// ça permet d'en ajouter un plus tard sans casser les clients.
+// ---------- Requêtes et réponses ----------
+// Un message dédié par méthode, même à un seul champ : on pourra en
+// ajouter un plus tard sans casser les clients déjà déployés.
 
 message EnvoyerMessageRequete {
   string salon_id = 1;
@@ -456,8 +338,8 @@ message EnvoyerMessageRequete {
 }
 
 message EnvoyerMessageReponse {
-  Message message = 1;  // le message tel que le serveur l'a enregistré,
-                        // avec son id et son horodatage définitifs
+  Message message = 1;  // le message tel qu'enregistré, avec son id
+                        // et son horodatage définitifs
 }
 
 message HistoriqueRequete {
@@ -465,24 +347,23 @@ message HistoriqueRequete {
   int32  limite   = 2;  // combien de messages au maximum
 }
 
-message TelversementMorceau {
+message TeleversementMorceau {
   bytes donnees = 1;    // un fragment du fichier
-  int32 index   = 2;    // son rang, pour reconstituer dans l'ordre
+  int32 index   = 2;    // son rang, pour reconstituer l'ordre
 }
 
-message TelversementReponse {
-  string url            = 1;
-  int64  taille_octets  = 2;
+message TeleversementReponse {
+  string url           = 1;
+  int64  taille_octets = 2;
 }
 
 message EvenementSalon {
-  // "oneof" veut dire : un seul de ces champs est rempli à la fois.
-  // C'est l'équivalent d'une union en C, mais avec l'information
-  // de quel membre est actif.
+  // "oneof" : un seul de ces champs est rempli à la fois. C'est une
+  // union en C, mais avec l'info de quel membre est actif.
   oneof evenement {
-    Message      nouveau_message = 1;
-    Utilisateur  arrivee         = 2;
-    Utilisateur  depart          = 3;
+    Message     nouveau_message = 1;
+    Utilisateur arrivee         = 2;
+    Utilisateur depart          = 3;
   }
 }
 
@@ -499,7 +380,7 @@ service Messagerie {
 
   // CLIENT STREAMING : j'envoie un fichier par morceaux, le serveur ne
   // répond qu'une fois qu'il a tout reçu.
-  rpc TeleverserFichier(stream TelversementMorceau) returns (TelversementReponse);
+  rpc TeleverserFichier(stream TeleversementMorceau) returns (TeleversementReponse);
 
   // BIDIRECTIONNEL : je reste connecté au salon. J'envoie quand je veux,
   // je reçois quand ça bouge, les deux sens sont indépendants.
@@ -507,55 +388,40 @@ service Messagerie {
 }
 ```
 
-Trois détails qui méritent l'attention.
+Trois détails méritent l'attention.
 
-Le `package messagerie.v1` contient un numéro de version. C'est une convention très
-répandue : quand tu devras faire un changement incompatible, tu créeras un
-`messagerie.v2` à côté, et les deux tourneront en parallèle le temps que les vieilles
-applications mobiles installées chez tes utilisateurs soient mises à jour. Tu ne
-contrôles pas quand un utilisateur met à jour son app — c'est une contrainte propre au
-mobile.
+Le `package messagerie.v1` porte un numéro de version. Convention répandue : le jour d'un changement incompatible, tu créeras `messagerie.v2` à côté et les deux tourneront en parallèle, le temps que les vieilles applications installées chez tes utilisateurs soient mises à jour. Tu ne contrôles pas quand un utilisateur met à jour son app — contrainte propre au mobile.
 
-Le `oneof` est l'équivalent d'une `union` en C, avec en plus l'information de savoir
-quel membre est actuellement rempli. Le code généré t'oblige à traiter chaque cas.
+Le `oneof` est une `union` C, plus l'information de savoir quel membre est rempli ; le code généré t'oblige à traiter chaque cas.
 
-Le champ `horodatage_ms` est un `int64` et pas un `string`. Une date en texte
-(« 2026-09-03T14:32:00Z ») fait une vingtaine d'octets, se compare mal et dépend du
-fuseau. Un entier de millisecondes en fait huit et se compare avec `<`.
+`horodatage_ms` est un `int64`, pas un `string`. Une date en texte (« 2026-09-03T14:32:00Z ») fait une vingtaine d'octets, se compare mal et dépend du fuseau. Un entier de millisecondes en fait huit et se compare avec `<`.
 
 ---
 
-## 9. Le cycle complet : du .proto au code qui tourne
-
-Voici l'enchaînement, dans l'ordre :
+## 9. Le cycle : du .proto au code qui tourne
 
 ```
-   messagerie.proto            ← 1. tu l'écris à la main
+   messagerie.proto           ← 1. tu l'écris à la main
          │
-         │  protoc --plugin=...  ← 2. tu lances le compilateur
+         │  protoc            ← 2. tu lances le compilateur
          ▼
-   ┌──────────────────────────────────────────┐
-   │  code généré (NE JAMAIS MODIFIER)        │
-   │                                          │
-   │  • les structures/classes des messages   │
-   │  • le stub client (fonctions à appeler)  │
-   │  • la base du serveur (à compléter)      │
-   └──────────────────────────────────────────┘
-         │                          │
-         │ 3a.                      │ 3b.
-         ▼                          ▼
-   ton code CLIENT            ton code SERVEUR
-   appelle les stubs          remplit les méthodes vides
-         │                          │
-         └──────── réseau ──────────┘
-                    4. ça tourne
+   ┌────────────────────────────────────┐
+   │  code généré (NE PAS MODIFIER)     │
+   │   • les structures des messages    │
+   │   • le stub client (à appeler)     │
+   │   • la base du serveur (à remplir) │
+   └────────────────────────────────────┘
+         │                      │
+         │ 3a.                  │ 3b.
+         ▼                      ▼
+   ton code CLIENT        ton code SERVEUR
+   appelle les stubs      remplit les méthodes
+         │                      │
+         └────── réseau ────────┘
+                4. ça tourne
 ```
 
-`protoc` est le **compilateur protobuf**. Le parallèle avec `gcc` est direct : `gcc`
-prend un `.c` et produit un exécutable ; `protoc` prend un `.proto` et produit du code
-source dans le langage de ton choix.
-
-Une commande typique ressemble à ça :
+`protoc` est le **compilateur protobuf**, et le parallèle avec `gcc` est direct : `gcc` prend un `.c` et produit un exécutable, `protoc` prend un `.proto` et produit du code source dans le langage de ton choix.
 
 ```sh
 protoc --proto_path=. \
@@ -564,173 +430,101 @@ protoc --proto_path=. \
        messagerie.proto
 ```
 
-Décomposons, chaque option compte :
-
 | Option | Rôle |
 |---|---|
-| `--proto_path=.` | où chercher les `.proto`, y compris ceux importés |
-| `--python_out=DOSSIER` | générer les **messages** en Python dans ce dossier |
+| `--proto_path=.` | où chercher les `.proto`, y compris les importés |
+| `--python_out=DOSSIER` | générer les **messages** dans ce dossier |
 | `--grpc_python_out=DOSSIER` | générer les **stubs de service** (plugin séparé) |
 | `messagerie.proto` | le fichier d'entrée |
 
-Il faut deux options de sortie parce que protobuf (les messages) et gRPC (les
-services) sont deux projets distincts : `protoc` sait faire le premier tout seul, et
-délègue le second à un plugin.
+Deux options de sortie, parce que protobuf (les messages) et gRPC (les services) sont deux projets distincts : `protoc` fait le premier seul et délègue le second à un plugin.
 
-La règle absolue : **le code généré ne se modifie jamais à la main**. Il sera écrasé à
-la prochaine génération. On le régénère à chaque changement du `.proto`, et beaucoup
-d'équipes ne le versionnent même pas dans git — c'est un artefact de compilation, comme
-un fichier `.o` en C.
+Règle absolue : **le code généré ne se modifie jamais à la main**, il sera écrasé à la génération suivante. On le régénère à chaque changement du `.proto`, et beaucoup d'équipes ne le versionnent même pas dans git — c'est un artefact de compilation, comme un `.o` en C.
 
-> **Prérequis :** pour écrire le code client et serveur (étapes 3a et 3b), il te faut
-> un langage de haut niveau. `protoc` ne génère **pas** de C — il génère du C++, du
-> Python, du Go, du Java, du Kotlin, du Swift, du JavaScript et quelques autres. Tu
-> peux dès maintenant écrire des `.proto` et lancer `protoc` pour **lire** le code
-> généré : c'est instructif et parfaitement à ta portée. Écrire le serveur viendra
-> après ton premier langage de haut niveau.
+> **Prérequis :** pour écrire le client et le serveur (3a et 3b), il te faut un langage de haut niveau. `protoc` ne génère **pas** de C : il génère du C++, Python, Go, Java, Kotlin, Swift, JavaScript et quelques autres. Dès maintenant tu peux écrire des `.proto`, lancer `protoc` et **lire** le code généré — c'est instructif et à ta portée. Écrire le serveur viendra après ton premier langage de haut niveau.
 
 ---
 
 ## 10. Choisir : gRPC, REST ou WebSocket
 
-Les trois savent faire communiquer deux machines. Voici comment trancher.
+**REST** quand une API publique est consommée par des gens que tu ne connais pas (c'est le standard de fait), quand un navigateur appelle directement ton serveur, quand tu veux déboguer avec `curl`, ou quand le projet est petit et que tu ne veux pas installer d'outillage.
 
-**Choisis REST quand :**
-- une API publique doit être consommée par des gens que tu ne connais pas (REST est le
-  standard de fait, personne ne se plaindra) ;
-- un navigateur web appelle directement ton serveur ;
-- tu veux pouvoir déboguer avec `curl` et lire les réponses à l'œil nu ;
-- le projet est petit et tu ne veux pas installer d'outillage.
+**gRPC** quand tes services internes se parlent entre eux (le cas d'usage roi), quand une app mobile parle à ton propre backend, quand le contrat strict et la génération de code te font gagner du temps, quand le volume d'appels est élevé, ou quand tu as besoin de streaming structuré.
 
-**Choisis gRPC quand :**
-- tes services internes se parlent entre eux (c'est le cas d'usage roi) ;
-- une application mobile parle à ton propre backend ;
-- le contrat strict et la génération de code te font gagner du temps ;
-- le volume d'appels est élevé et les octets comptent ;
-- tu as besoin de streaming structuré dans un sens ou dans les deux.
-
-**Choisis WebSocket quand :**
-- il faut du temps réel bidirectionnel **et** que le client est un navigateur ;
-- les messages sont libres, sans schéma fixe fort ;
-- tu veux le support navigateur natif sans couche de traduction.
-
-En résumé, sous forme de tableau de décision :
+**WebSocket** quand il faut du temps réel bidirectionnel **et** que le client est un navigateur, quand les messages sont libres sans schéma fixe, ou quand tu veux le support navigateur natif sans couche de traduction.
 
 | Ta situation | Le bon choix |
 |---|---|
 | API publique, clients inconnus | REST |
 | Navigateur → ton serveur | REST ou WebSocket |
 | Microservice → microservice | gRPC |
-| App mobile → ton backend | gRPC (ou REST si l'équipe est déjà dessus) |
+| App mobile → ton backend | gRPC (ou REST si l'équipe y est déjà) |
 | Chat temps réel dans un navigateur | WebSocket |
 | Chat temps réel dans une app mobile | gRPC bidirectionnel |
 | Téléversement de gros fichiers | gRPC client streaming, ou HTTP classique |
 
-Et un rappel de réalisme : dans la vraie vie, beaucoup d'architectures font **les
-deux**. Une passerelle expose du REST vers l'extérieur, et parle gRPC aux services
-internes derrière. Ce n'est pas un choix idéologique, c'est une question de contexte.
+Rappel de réalisme : beaucoup d'architectures font **les deux**. Une passerelle expose du REST vers l'extérieur et parle gRPC aux services internes derrière. Ce n'est pas idéologique, c'est contextuel.
 
 ---
 
 ## 11. gRPC en mobile
 
-Ton objectif final étant le développement mobile, cette section est celle qui te
-concernera le plus.
+Ton objectif final étant le mobile, voici la section qui te concernera le plus. Un téléphone a trois contraintes que gRPC adresse bien.
 
-Un téléphone n'est pas un serveur. Il a trois contraintes que gRPC adresse bien.
+**La batterie.** Ce qui consomme sur un mobile, c'est la **radio**. La réveiller coûte de l'énergie et elle reste allumée un moment après chaque transmission. Moins d'octets et moins de connexions, c'est directement moins de temps d'antenne. Une connexion HTTP/2 unique et persistante bat largement plusieurs connexions HTTP/1.1 rouvertes en boucle.
 
-**La batterie.** Sur un mobile, ce qui consomme, c'est la **radio** — l'antenne
-cellulaire. La réveiller coûte de l'énergie, et elle reste allumée un moment après
-chaque transmission. Moins d'octets et moins de connexions, c'est directement moins de
-temps d'antenne allumée. Une connexion HTTP/2 unique et persistante bat largement
-plusieurs connexions HTTP/1.1 rouvertes en boucle.
+**La bande passante.** En 4G bridée, dans le métro ou avec un forfait limité, un facteur trois ou quatre sur la taille se ressent. Sur un écran qui charge cinquante éléments, 200 Ko contre 60 Ko est perceptible à l'usage.
 
-**La bande passante.** En 4G bridée, dans le métro ou avec un forfait limité, un
-facteur trois ou quatre sur la taille des messages se ressent. Sur un écran qui charge
-cinquante éléments, la différence entre 200 Ko et 60 Ko est perceptible à l'usage.
+**Le type strict.** Une app déployée sur l'App Store ou le Play Store ne se met pas à jour instantanément : des utilisateurs gardent une vieille version des mois durant. Un contrat `.proto` versionné et vérifié à la compilation limite sérieusement les mauvaises surprises face à du JSON dont on découvre les incompatibilités en production.
 
-**Le type strict.** Une application mobile déployée sur l'App Store ou le Play Store
-ne se met pas à jour instantanément : des utilisateurs gardent une vieille version
-pendant des mois. Un contrat `.proto` versionné et vérifié à la compilation limite
-sérieusement les mauvaises surprises comparé à du JSON dont on découvre les
-incompatibilités en production.
-
-**La limite : le navigateur.** C'est le vrai point faible, et il faut le dire
-clairement. gRPC a besoin d'un contrôle fin sur les trames HTTP/2 que le JavaScript
-d'une page web n'a **pas** — l'API `fetch` du navigateur ne l'expose pas. Un navigateur
-ne peut donc pas parler gRPC nativement.
-
-La réponse s'appelle **grpc-web**, et c'est un compromis :
+**La limite : le navigateur.** C'est le vrai point faible. gRPC a besoin d'un contrôle fin sur les trames HTTP/2 que le JavaScript d'une page web n'a **pas** — l'API `fetch` ne l'expose pas. Un navigateur ne peut donc pas parler gRPC nativement. La réponse est **grpc-web**, un compromis :
 
 ```
-   Navigateur                Proxy                  Serveur
-   ┌────────┐            ┌──────────┐            ┌──────────┐
-   │ JS     │ grpc-web   │  Envoy   │   gRPC     │  ton     │
-   │ client │ ─────────► │    ou    │ ─────────► │  service │
-   │        │  (HTTP/1.1 │  autre   │  (HTTP/2   │          │
-   │        │   possible)│          │   complet) │          │
-   └────────┘            └──────────┘            └──────────┘
+   Navigateur              Proxy                Serveur
+   ┌────────┐          ┌──────────┐          ┌──────────┐
+   │   JS   │ grpc-web │  Envoy   │   gRPC   │   ton    │
+   │ client │ ───────► │    ou    │ ───────► │ service  │
+   │        │          │  autre   │ (HTTP/2  │          │
+   └────────┘          └──────────┘  complet)└──────────┘
 ```
 
-Il faut donc déployer et maintenir un proxy en plus. Et grpc-web ne supporte **pas** le
-client streaming ni le bidirectionnel — seulement l'unaire et le server streaming.
+Il faut déployer et maintenir un proxy en plus, et grpc-web ne supporte **ni** le client streaming **ni** le bidirectionnel — seulement l'unaire et le server streaming.
 
-Bonne nouvelle pour toi : **cette limite ne concerne pas les applications mobiles
-natives**. Une app iOS en Swift ou une app Android en Kotlin contrôle sa pile réseau et
-parle gRPC directement, sans proxy, avec les quatre modes. C'est précisément le terrain
-où gRPC est le plus à l'aise.
+Bonne nouvelle : **cette limite ne concerne pas les apps mobiles natives**. Une app iOS en Swift ou Android en Kotlin contrôle sa pile réseau, parle gRPC directement, sans proxy, avec les quatre modes. C'est le terrain où gRPC est le plus à l'aise.
 
 ---
 
 ## 12. Installation sur macOS
 
-Tu es sur Apple Silicon avec zsh. Si tu n'as pas Homebrew :
+Sur Apple Silicon avec zsh. Si tu n'as pas Homebrew :
 
 ```sh
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 ```
 
-Puis :
+Puis les outils, et la vérification :
 
 ```sh
-brew install protobuf
-brew install grpc
+brew install protobuf grpc grpcurl
+protoc --version        # doit afficher : libprotoc 29.x ou proche
 ```
 
-Vérifie que ça a marché :
+`grpcurl` est l'équivalent de `curl` pour gRPC : c'est lui qui te permettra de tester un service depuis le terminal.
 
-```sh
-protoc --version
-# doit afficher quelque chose comme : libprotoc 29.x
-```
-
-Note un piège spécifique à Apple Silicon : Homebrew installe dans `/opt/homebrew`
-(alors que sur les Mac Intel c'était `/usr/local`). Si `protoc --version` répond
-`command not found`, c'est que `/opt/homebrew/bin` n'est pas dans ton `PATH`. Vérifie :
+Piège spécifique à Apple Silicon : Homebrew installe dans `/opt/homebrew` (et non `/usr/local` comme sur les Mac Intel). Si `protoc --version` répond `command not found`, c'est que `/opt/homebrew/bin` n'est pas dans ton `PATH` :
 
 ```sh
 echo $PATH | tr ':' '\n' | grep homebrew
 ```
 
-Si la commande ne renvoie rien, ajoute la ligne à ton `~/.zshrc` :
+Si rien ne sort, ajoute la ligne à ton `~/.zshrc` :
 
 ```sh
 echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zshrc
 source ~/.zshrc
 ```
 
-Un dernier outil, très utile pour tester un service gRPC depuis le terminal — c'est
-l'équivalent de `curl` pour gRPC :
-
-```sh
-brew install grpcurl
-```
-
-Enfin, un détail macOS que tu croiseras : les outils en ligne de commande de macOS sont
-des **BSD**, pas des **GNU** comme sur Linux. `sed -i` et `grep` n'ont pas exactement
-les mêmes options. Beaucoup de tutoriels gRPC sont écrits pour Linux ; si une commande
-de préparation de fichiers échoue chez toi avec une erreur d'option, c'est souvent ça.
-`brew install gnu-sed grep` te donne les versions GNU si besoin.
+Dernier détail macOS : les outils en ligne de commande sont des **BSD**, pas des **GNU** comme sur Linux. `sed -i` et `grep` n'ont pas les mêmes options. Beaucoup de tutoriels gRPC sont écrits pour Linux ; si une commande échoue chez toi sur une option inconnue, c'est souvent ça. `brew install gnu-sed grep` te donne les versions GNU au besoin.
 
 ---
 
@@ -738,22 +532,18 @@ de préparation de fichiers échoue chez toi avec une erreur d'option, c'est sou
 
 **gRPC** = appeler une fonction sur une autre machine comme si elle était locale.
 
-**RPC** = *Remote Procedure Call*, l'idée générale ; les **stubs** générés créent
-l'illusion de l'appel local.
+**RPC** = *Remote Procedure Call* ; les **stubs** générés créent l'illusion de l'appel local.
 
 **Protocol Buffers** = le langage de description (`.proto`) + le format binaire compact.
 
-**Le fichier .proto** contient :
-- `syntax = "proto3";` toujours en première ligne
+**Le `.proto` contient :**
+- `syntax = "proto3";` en première ligne, toujours
 - `package nom.v1;` pour l'espace de noms et la version
 - `message` = un regroupement de champs, comme un `struct` en C
 - `service` + `rpc` = les fonctions exposées
-- les numéros de champ (`= 1`, `= 2`) **ne changent jamais** ; les noms, eux, peuvent
-  changer sans rien casser
+- les numéros de champ (`= 1`, `= 2`) **ne changent jamais** ; les noms, si
 
 **Une méthode rpc** prend exactement un message et rend exactement un message.
-
-**Les quatre modes :**
 
 | Mode | Signature | Exemple |
 |---|---|---|
@@ -762,21 +552,14 @@ l'illusion de l'appel local.
 | Client streaming | `(stream A) returns (B)` | téléverser un fichier |
 | Bidirectionnel | `(stream A) returns (stream B)` | un salon de chat |
 
-**Le cycle :** `.proto` → `protoc` → code généré (jamais modifié à la main) →
-implémentation client et serveur.
+**Le cycle :** `.proto` → `protoc` → code généré (jamais modifié à la main) → client et serveur.
 
-**HTTP/2** apporte le multiplexage (plusieurs flux sur une connexion), la compression
-des en-têtes et les flux bidirectionnels.
+**HTTP/2** apporte le multiplexage, la compression des en-têtes et les flux bidirectionnels.
 
-**Quand l'utiliser :** services internes, app mobile native vers ton backend, streaming
-structuré. **Quand l'éviter :** API publique, appel direct depuis un navigateur (il
-faut un proxy grpc-web, sans client streaming ni bidirectionnel).
+**L'utiliser :** services internes, app mobile native vers ton backend, streaming structuré. **L'éviter :** API publique, appel direct depuis un navigateur (proxy grpc-web obligatoire, sans client streaming ni bidirectionnel).
 
-**Installation macOS :** `brew install protobuf grpc grpcurl`, puis vérifie
-`protoc --version`.
+**Installation :** `brew install protobuf grpc grpcurl`, puis `protoc --version`.
 
-**Ce que tu peux faire dès maintenant :** écrire des `.proto`, lancer `protoc`, lire le
-code généré. **Ce qui attendra :** implémenter client et serveur, qui demande un
-langage de haut niveau et, pour le streaming, la programmation asynchrone.
+**Praticable dès maintenant :** écrire des `.proto`, lancer `protoc`, lire le code généré. **Ce qui attendra :** implémenter client et serveur (langage de haut niveau), et le streaming (asynchrone).
 
 À faire ensuite : `../exercices/grpc.md`.
