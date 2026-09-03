@@ -2,7 +2,7 @@
 
 Ce qui se passe entre le fichier `.c` que tu écris et le programme qui tourne.
 
-Suite de [why_C.md](why_C.md).
+Suite de [01_pourquoi_le_c.md](01_pourquoi_le_c.md).
 
 ---
 

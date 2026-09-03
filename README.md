@@ -18,6 +18,7 @@ jusqu'au niveau permettant de choisir et d'attaquer une spécialisation :
 
 ```
 learn_dev/
+├── 0.Discover_IT/           # Socle : ordinateur et réseaux, sans prérequis
 ├── learn_C/                 # Socle : langage C, mémoire, pointeurs
 ├── learn_linux/             # Socle : shell, système de fichiers, outils
 ├── projets_to_learn_algo/   # Socle : algorithmique et structures de données
@@ -31,6 +32,20 @@ learn_dev/
 ## Le parcours
 
 ### Phase 1 — Le socle (à faire en premier, dans l'ordre)
+
+#### 0. [`0.Discover_IT/`](0.Discover_IT/) — Découvrir l'informatique
+
+Point d'entrée, sans aucun prérequis. Ce module ne fait pas écrire de code : il
+pose le vocabulaire que tous les cours suivants supposent acquis — mémoire,
+adresse, octet, processus, protocole, port.
+
+- Comment une machine qui ne sait que compter fait tourner un navigateur
+- Binaire, codage de l'information, ASCII et UTF-8
+- Processeur, mémoire vive, stockage, hiérarchie mémoire
+- Rôle du système d'exploitation
+- Réseaux : couches, IP, TCP/UDP, DNS, HTTP/HTTPS
+
+À faire avant `1.Learn_C` si les mots ci-dessus ne sont pas familiers.
 
 #### 1. `learn_C/` — Le langage C
 
@@ -61,7 +76,7 @@ Savoir naviguer dans le système est un prérequis, pas un bonus.
 - **Git** : commits, branches, remotes, résolution de conflits
 - Bases du scripting shell
 
-#### 3. [`4.projects_to_learn_algo/`](4.projects_to_learn_algo/) — Algorithmique
+#### 3. [`3.projects_to_learn_algo/`](3.projects_to_learn_algo/) — Algorithmique
 
 Ce qui sépare un programme qui marche d'un programme qui tient la charge.
 
@@ -76,9 +91,9 @@ ce qu'on cherche à comprendre.
 - Structures : listes chaînées, piles, files, arbres, tables de hachage
 - Graphes : parcours en largeur et en profondeur
 
-Les trois projets — [analyseur de texte](4.projects_to_learn_algo/projects/01_analyseur_de_texte/),
-[moteur d'itinéraires](4.projects_to_learn_algo/projects/02_moteur_itineraires/),
-[banc de mesure des tris](4.projects_to_learn_algo/projects/03_banc_de_tri/) — mettent
+Les trois projets — [analyseur de texte](3.projects_to_learn_algo/projects/01_analyseur_de_texte/),
+[moteur d'itinéraires](3.projects_to_learn_algo/projects/02_moteur_itineraires/),
+[banc de mesure des tris](3.projects_to_learn_algo/projects/03_banc_de_tri/) — mettent
 les structures en concurrence sur un cas réel.
 
 ### Phase 2 — Choisir une spécialisation
@@ -107,15 +122,16 @@ Applications Android (Kotlin) ou iOS (Swift), cycle de vie d'une application,
 interface, stockage local, appels réseau, publication sur les stores.
 Le cross-platform (Flutter) et les quatre façons de brancher un backend y sont
 également traités, et mis en pratique dans
-[mobile_dev/projects/](mobile_dev/projects/).
+[7.Learn_mobile_dev/projects/](7.Learn_mobile_dev/projects/).
 
 ## Progression
 
 - [x] Environnement de travail en place
+- [ ] `0.Discover_IT` — ordinateur et réseaux
 - [ ] `learn_C` — bases du langage
 - [ ] `learn_C` — pointeurs et mémoire
 - [ ] `learn_linux` — shell et Git
-- [ ] `4.projects_to_learn_algo` — structures de données
+- [ ] `3.projects_to_learn_algo` — structures de données
 - [ ] Choix de la spécialisation
 
 ## Comment travailler dans ce dépôt
