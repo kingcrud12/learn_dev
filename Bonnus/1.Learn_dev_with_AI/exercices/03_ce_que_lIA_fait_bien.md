@@ -86,8 +86,19 @@ Demandez la dernière version stable de `gcc`, `make`, `git`, `valgrind`.
 gcc --version | head -1
 make --version | head -1
 git --version
-valgrind --version
+valgrind --version        # peut ne pas exister sur votre machine
 ```
+
+**Une remarque sur la dernière ligne.** Si `valgrind` n'est pas installé — c'est
+le cas sur macOS Apple Silicon — le modèle vous en aura donné une version quand
+même. Vérifiez d'abord ce que vous avez :
+
+```sh
+which valgrind leaks lldb
+```
+
+Une version annoncée pour un outil absent est une hallucination sur un objet
+inattendu : non pas une fonction, mais votre propre environnement.
 
 Puis cherchez les versions réellement actuelles dans la documentation officielle.
 
@@ -141,7 +152,8 @@ Puis vérifiez chaque remarque de fuite vous-même :
 
 ```sh
 gcc -Wall -Wextra -g votre_code.c -o prog
-valgrind --leak-check=full ./prog
+leaks --atExit -- ./prog                  # macOS
+valgrind --leak-check=full ./prog         # Linux
 ```
 
 | Remarque | Vérifiée comment | Juste ? |
@@ -149,7 +161,7 @@ valgrind --leak-check=full ./prog
 | | | |
 
 Combien de remarques justes ? Combien de fausses ? Combien avait-il manquées que
-`valgrind` a trouvées ?
+le détecteur de fuites a trouvées ?
 
 ## 2.4 — Les cas limites
 
@@ -213,8 +225,8 @@ Sans aide, répondez par écrit :
 - pourquoi la boucle s'arrête-t-elle ?
 - que faut-il garantir sur `d` pour que ce soit sûr ?
 
-Vérifiez ensuite. Écrivez un programme qui l'utilise et exécutez-le sous
-`valgrind`.
+Vérifiez ensuite. Écrivez un programme qui l'utilise et passez-le au détecteur de
+fuites (`leaks --atExit --` sur macOS, `valgrind` sous Linux).
 
 ## 3.3 — Le code généré non compris
 
@@ -356,17 +368,28 @@ Rangez-le dans
 [../../2.practice_dev_with_AI/](../../2.practice_dev_with_AI/). Relisez-le dans
 un mois et corrigez ce que l'expérience a démenti.
 
-## 5.4 — Apprendre valgrind en le regardant faire
+## 5.4 — Apprendre l'outil en le regardant faire
 
 Introduisez trois bugs mémoire dans un programme : fuite, `free` double, accès
 hors bornes.
 
-Demandez un diagnostic par `valgrind`, en demandant les commandes exactes.
+Demandez un diagnostic mémoire, en demandant les commandes exactes **pour votre
+système**. Vérifiez qu'elles existent :
+
+```sh
+which valgrind leaks
+```
+
+Une troisième voie marche partout, et c'est souvent la meilleure :
+
+```sh
+gcc -fsanitize=address -g prog.c -o prog && ./prog
+```
 
 Exécutez-les vous-même. Lisez la sortie brute. Comprenez chaque ligne.
 
-Vous venez d'apprendre `valgrind` — c'est un des meilleurs usages du modèle, et
-il ne vous a rien coûté en apprentissage.
+Vous venez d'apprendre un outil de diagnostic mémoire — c'est un des meilleurs
+usages du modèle, et il ne vous a rien coûté en apprentissage.
 
 ## 5.5 — Le contre-test
 
@@ -408,7 +431,8 @@ Mais pour ce fichier en particulier, la plupart des réponses des niveaux 1 à 3
 
 ```sh
 gcc -Wall -Wextra fichier.c -o prog    # la fonction existe, le type est bon
-valgrind --leak-check=full ./prog      # la fuite est réelle ou non
+leaks --atExit -- ./prog               # la fuite est réelle ou non (macOS)
+valgrind --leak-check=full ./prog      # idem (Linux)
 man 3 fonction                          # la signature exacte
 echo "..." | bc                         # le calcul juste
 ```

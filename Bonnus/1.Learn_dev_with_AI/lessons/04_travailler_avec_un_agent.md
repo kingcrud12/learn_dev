@@ -113,8 +113,8 @@ Dans ce dépôt, j'apprends. Règles permanentes :
 
 - Ne jamais écrire ni modifier de fichier dans les dossiers
   d'exercices ou dans codes/ : ce sont mes exercices.
-- Tu peux lire tout le dépôt, compiler, exécuter, lancer gdb ou
-  valgrind, et me dire ce que tu observes.
+- Tu peux lire tout le dépôt, compiler, exécuter, lancer lldb ou
+  un détecteur de fuites, et me dire ce que tu observes.
 - Quand je suis bloqué : indice gradué, jamais la solution.
 - Pour l'outillage (Makefile, scripts de mesure, README), tu peux
   écrire — je lirai le diff.
@@ -133,17 +133,18 @@ règles à chaque conversation.
 C'est son emploi le plus rentable, et il est en lecture seule :
 
 ```
-Mon programme segfault. Compile-le avec -g, lance-le sous gdb,
+Mon programme segfault. Compile-le avec -g, lance-le sous lldb,
 donne-moi la ligne fautive et l'état des variables à ce moment.
 Explique-moi ce que tu observes. Ne corrige rien.
 ```
 
-L'agent exécute vraiment `gcc` et `gdb`, et vous rapporte des faits. Ce n'est
+L'agent exécute vraiment `gcc` et `lldb`, et vous rapporte des faits. Ce n'est
 plus une hypothèse — c'est une observation. Et le « ne corrige rien » vous
 garde le diagnostic et la correction.
 
-C'est aussi une excellente façon d'apprendre `gdb` et `valgrind` : vous voyez les
-commandes réelles qu'il utilise.
+C'est aussi une excellente façon d'apprendre `lldb` et la détection de fuites
+(`leaks` sur macOS, `valgrind` sous Linux) : vous voyez les commandes réelles
+qu'il utilise, sur votre système.
 
 ### Explorer un dépôt
 
@@ -258,8 +259,8 @@ sans en être dépendant.
   autorisée, diff relu.
 - Le **mode lecture est le défaut** — diagnostic, revue, interrogation y
   fonctionnent tous.
-- Un agent excelle à **diagnostiquer sur votre vraie machine** (`gdb`,
-  `valgrind`, compilation) sans rien écrire.
+- Un agent excelle à **diagnostiquer sur votre vraie machine** (`lldb`, `leaks`
+  ou `valgrind`, compilation) sans rien écrire.
 - Méfiez-vous du **travail plausible** : test modifié, cas spécial, erreur
   masquée. Lire le diff, pas le résumé.
 - La compétence réelle est de **découper, cadrer, lire un diff, vérifier** — et
@@ -287,10 +288,12 @@ retenir.
 
 **2. Diagnostiquer en lecture seule.** Prenez un programme C avec un bug de
 mémoire — ou introduisez-en un exprès, un `free` en trop ou un accès hors bornes.
-Demandez un diagnostic complet sous `gdb` et `valgrind`, **sans correction**.
+Demandez un diagnostic complet sous `lldb`, puis avec le détecteur de fuites de
+votre système, **sans correction**.
 
-Notez les commandes qu'il a utilisées. Relancez-les vous-même, à la main. Vous
-apprenez `valgrind` en le regardant faire.
+Notez les commandes qu'il a utilisées — et notez lesquelles existent réellement
+sur votre machine. Relancez-les vous-même, à la main. Vous apprenez l'outil en le
+regardant faire.
 
 **3. Écrire vos règles permanentes.** Créez un `CLAUDE.md` à la racine du dépôt
 (ou l'équivalent pour votre outil) avec vos règles d'apprentissage. Partez du

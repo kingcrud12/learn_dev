@@ -296,7 +296,7 @@ ce qu'est un pointeur et à quoi sert `malloc`. Demandez une correction exigeant
 Ce que vous avez omis est ce que vous croyiez savoir.
 
 **5. Écrire votre fichier de cadrage.** Créez `mes_regles_IA.md` dans
-[../2.practice_dev_with_AI/](../2.practice_dev_with_AI/) : vos instructions de
+[../../2.practice_dev_with_AI/](../../2.practice_dev_with_AI/) : vos instructions de
 session, adaptées à votre niveau et à ce que vous savez de vos propres
 raccourcis. Vous le collerez en début de session, et le ferez évoluer.
 

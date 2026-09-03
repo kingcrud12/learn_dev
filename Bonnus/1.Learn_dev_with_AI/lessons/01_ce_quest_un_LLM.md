@@ -189,7 +189,7 @@ inutile.
 
 ```
 "Ce code segfault à la ligne 12. Voici le code : [...]
- Voici la sortie de gdb : [...]
+ Voici la sortie de lldb : [...]
  Le tableau est alloué ligne 8 avec malloc(n).
  Explique-moi la cause avant de proposer un correctif."
 ```

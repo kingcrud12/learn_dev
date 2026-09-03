@@ -255,7 +255,7 @@ de mémoire. C'est votre dette technique personnelle, et personne d'autre ne la
 verra.
 
 **5. Écrire vos propres règles.** Créez `mon_protocole.md` dans
-[../2.practice_dev_with_AI/](../2.practice_dev_with_AI/). Pas une copie de cette
+[../../2.practice_dev_with_AI/](../../2.practice_dev_with_AI/). Pas une copie de cette
 leçon : **vos** règles, tirées de ce que les exercices 1 à 4 vous ont appris sur
 vos propres raccourcis.
 
@@ -266,7 +266,7 @@ compte vraiment, parce que c'est le seul que vous avez écrit vous-même.
 
 Ce module est terminé. Les exercices sont dans
 [../exercices/](../exercices/), et
-[../2.practice_dev_with_AI/](../2.practice_dev_with_AI/) accueille vos fichiers
+[../../2.practice_dev_with_AI/](../../2.practice_dev_with_AI/) accueille vos fichiers
 de règles et vos traces de session.
 
 Le socle reste la priorité : [0.Discover_IT](../../../0.Discover_IT/) →
