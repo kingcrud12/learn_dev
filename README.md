@@ -96,6 +96,9 @@ données, authentification), réseau (HTTP, DNS), déploiement.
 #### `mobile_dev/` — Développement mobile
 Applications Android (Kotlin) ou iOS (Swift), cycle de vie d'une application,
 interface, stockage local, appels réseau, publication sur les stores.
+Le cross-platform (Flutter) et les quatre façons de brancher un backend y sont
+également traités, et mis en pratique dans
+[mobile_dev/projects/](mobile_dev/projects/).
 
 ## Progression
 
