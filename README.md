@@ -47,21 +47,32 @@ adresse, octet, processus, protocole, port.
 
 À faire avant `1.Learn_C` si les mots ci-dessus ne sont pas familiers.
 
-#### 1. `learn_C/` — Le langage C
+#### 1. [`1.Learn_C/`](1.Learn_C/) — Le langage C
 
 Le C est choisi comme premier langage parce qu'il ne cache rien : la mémoire,
 les types et le cycle de compilation sont explicites. Ce qu'on y apprend
 resservira partout.
 
-- Compilation, exécution, cycle `.c` → `.o` → binaire
-- Types, variables, opérateurs
-- Conditions, boucles, fonctions
-- Tableaux et chaînes de caractères
-- **Pointeurs** (le point charnière du parcours)
-- Allocation dynamique : `malloc`, `free`, fuites mémoire
-- Structures, `typedef`, énumérations
-- Fichiers multiples, headers, compilation séparée, `make`
-- Lecture et écriture de fichiers
+Chaque leçon suit le même principe : une notion du langage, puis **ce qu'elle
+oblige à comprendre de la machine**. Le pointeur n'est pas une bizarrerie du C,
+c'est le fait que la mémoire est adressable ; `malloc` n'est pas une fonction,
+c'est la frontière entre le processus et le noyau.
+
+| # | Leçon | Ce que ça révèle de la machine |
+|---|---|---|
+| 01 | [Pourquoi le C](1.Learn_C/lessons/01_pourquoi_le_c.md) | ce que les autres langages cachent |
+| 02 | [Compiler, exécuter, déboguer](1.Learn_C/lessons/02_compiler_executer_debugger.md) | `fork`, `exec`, chargement par le noyau |
+| 03 | [Variables et types](1.Learn_C/lessons/03_variables_et_types.md) | un type est une taille en octets |
+| 04 | [Headers et compilation](1.Learn_C/lessons/04_headers_et_compilation.md) | symboles, édition de liens, bibliothèques |
+| 05 | [Représentation binaire](1.Learn_C/lessons/05_representation_binaire.md) | complément à deux, IEEE 754, boutisme |
+| 06 | [Tableaux et chaînes](1.Learn_C/lessons/06_tableaux_et_chaines.md) | contiguïté, cache CPU, débordement de tampon |
+| 07 | [**Pointeurs**](1.Learn_C/lessons/07_pointeurs.md) | mémoire virtuelle, MMU, segfault, ASLR |
+| 08 | [Mémoire dynamique](1.Learn_C/lessons/08_memoire_dynamique.md) | pile vs tas, fragmentation, ce que fait un GC |
+| 09 | [Structures](1.Learn_C/lessons/09_structures.md) | alignement, bourrage, registres matériels |
+| 10 | [Fichiers et appels système](1.Learn_C/lessons/10_fichiers_et_appels_systeme.md) | descripteurs, mode noyau, « tout est fichier » |
+
+La leçon 07 est le point charnière du parcours : tout ce qui précède y converge,
+tout ce qui suit en dépend. La leçon 10 ouvre directement `4.Learn_dev_OS`.
 
 #### 2. `learn_linux/` — L'environnement
 
@@ -128,8 +139,8 @@ Le cross-platform (Flutter) et les quatre façons de brancher un backend y sont
 
 - [x] Environnement de travail en place
 - [ ] `0.Discover_IT` — ordinateur et réseaux
-- [ ] `learn_C` — bases du langage
-- [ ] `learn_C` — pointeurs et mémoire
+- [ ] `1.Learn_C` — bases du langage (leçons 01 à 06)
+- [ ] `1.Learn_C` — pointeurs et mémoire (leçons 07 à 10)
 - [ ] `learn_linux` — shell et Git
 - [ ] `3.projects_to_learn_algo` — structures de données
 - [ ] Choix de la spécialisation
