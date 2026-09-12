@@ -60,6 +60,7 @@ c'est la frontière entre le processus et le noyau.
 
 | # | Leçon | Ce que ça révèle de la machine |
 |---|---|---|
+| 00 | [Bilan : ce que je sais](1.Learn_C/lessons/00_bilan_ce_que_je_sais.md) | *point d'étape, à relire quand on doute* |
 | 01 | [Pourquoi le C](1.Learn_C/lessons/01_pourquoi_le_c.md) | ce que les autres langages cachent |
 | 02 | [Compiler, exécuter, déboguer](1.Learn_C/lessons/02_compiler_executer_debugger.md) | `fork`, `exec`, chargement par le noyau |
 | 03 | [Variables et types](1.Learn_C/lessons/03_variables_et_types.md) | un type est une taille en octets |

@@ -16,6 +16,18 @@ centièmes de seconde.
 Le code ne change pas. C'est `n` qui change — et ce module enseigne à prévoir ce
 qui se passe alors, **avant** d'avoir les données.
 
+## Prérequis, et comment commencer plus tôt
+
+Les leçons de ce module utilisent des tableaux, des pointeurs, `malloc` et des
+structures — soit les leçons **06 à 09** de [1.Learn_C](../1.Learn_C/lessons/).
+Sans elles, la leçon 02 est déjà illisible.
+
+Si tu n'en es pas encore là, commence par
+**[00_passerelle_depuis_le_C.md](00_passerelle_depuis_le_C.md)** : elle parcourt
+les dix sujets en introduisant la notion C **juste avant** d'en avoir besoin.
+Elle indique aussi ce qui est accessible dès aujourd'hui — la complexité et la
+récursivité ne demandent que les leçons C 01 à 03.
+
 ## Ce que ce module apporte aux quatre spécialisations
 
 | Spécialisation | Ce qui en resservira directement |
